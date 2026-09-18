@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#304bc3"><title>CommentFlow AI — Discover conversations</title>
+  <link rel="stylesheet" href="/styles.css"><script src="/auth.js" defer></script><script src="/workspace.js" defer></script><script src="/comments.js" defer></script><script src="/app.js" defer></script>
+</head>
+<body>
+  <!-- FEATURE/FUNCTION: Application shell. PURPOSE: Keep discovery in one accessible workspace. -->
+  <header class="topbar"><a class="brand" href="/" aria-label="CommentFlow AI home"><span class="brand-mark" aria-hidden="true">cf</span>CommentFlow <span class="brand-ai">AI</span></a><span class="workspace">YOUR DISCOVERY WORKSPACE</span><span id="connection" class="connection">Checking connection…</span><button id="logout" class="text-button" type="button">Log out</button></header>
+  <main>
+    <section class="intro"><p class="eyebrow">LINKEDIN POST DISCOVERY</p><h1>Find the right conversation.<br><span>Bring your perspective.</span></h1><p>Discover recent posts in your niche, review the opportunity,<br class="desktop-break"> and join the conversation on your terms.</p></section>
+    <!-- FEATURE/FUNCTION: Search controls. PURPOSE: Make every provider search an explicit operator action. -->
+    <section class="search-area" aria-labelledby="search-title"><div class="section-top"><h2 id="search-title">What’s your focus?</h2><span id="platform-label" class="platform">LinkedIn · Public posts</span></div>
+      <!-- FEATURE/FUNCTION: Brand and platform controls. PURPOSE: Configure manual assistance without triggering paid calls. -->
+      <div class="mode-controls"><div class="field"><label for="platform-select">Platform</label><select id="platform-select"><option value="linkedin">LinkedIn</option><option value="facebook">Facebook · manual</option><option value="instagram">Instagram · manual</option><option value="x">X · manual</option></select></div><label class="check-label" id="manual-toggle-label"><input id="manual-toggle" type="checkbox"> Paste a LinkedIn post manually</label></div>
+      <details class="brand-settings"><summary>Brand &amp; comment settings</summary><div class="settings-grid"><div class="field"><label for="brand-name">Brand/account name</label><input id="brand-name" maxlength="100" placeholder="Your brand or account"></div><div class="field"><label for="brand-description">Expertise and target audience</label><textarea id="brand-description" maxlength="1000" rows="3" placeholder="What you know and who you help"></textarea></div><div class="field"><label for="comment-tone">Tone</label><select id="comment-tone"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="conversational">Conversational</option></select></div><div class="field"><label for="comment-style">Style</label><select id="comment-style"><option value="useful addition">Useful addition</option><option value="supportive insight">Supportive insight</option><option value="thoughtful question">Thoughtful question</option><option value="short response">Short response</option></select></div></div><p class="search-note">Saved in this browser. Settings changes never run discovery or generate comments.</p></details>
+      <form id="manual-form" hidden><p class="search-note">Paste post text and link. Automatic discovery is not available for this platform yet.</p><div class="field"><label for="manual-text">Post text</label><textarea id="manual-text" minlength="20" maxlength="15000" rows="5" required></textarea></div><div class="field"><label for="manual-url">Direct post URL</label><input id="manual-url" type="url" placeholder="https://…" required></div><button id="manual-generate" type="submit" class="primary">Generate Comment</button><p class="search-note">Uses OpenAI API credit. The supplied link is never fetched or scraped.</p></form>
+      <form id="search-form">
+        <div class="keyword-row"><div class="field"><label for="keywords">Niche or keywords</label><input id="keywords" name="keywords" minlength="2" maxlength="150" placeholder="e.g. AI automation" required autocomplete="off"></div><button id="save-niche" class="secondary" type="button">+ Save niche</button></div>
+        <div class="saved-row"><label for="saved-niches">Saved niches</label><select id="saved-niches" aria-describedby="niche-status"><option value="">Choose a saved niche</option></select><button id="delete-niche" type="button" class="text-button" disabled>Delete niche</button><span id="niche-status" role="status"></span></div>
+        <div class="filters"><div class="field"><label for="time-range">Published within</label><select id="time-range"><option value="24h">Last 24 hours</option><option value="3d">Last 3 days</option><option value="7d" selected>Last 7 days</option></select></div><div class="field"><label for="quantity">Result quantity</label><select id="quantity"><option value="5">Up to 5 posts</option><option value="10">Up to 10 posts</option></select></div><div class="field"><label for="sort">Sort by</label><select id="sort"><option value="relevance">Most Relevant</option><option value="newest">Newest</option></select></div><button class="primary" id="find-posts" type="submit"><span aria-hidden="true">⌕</span> Find Posts</button></div>
+        <label class="check-label ai-opt-in"><input id="include-comments" type="checkbox" checked> Include AI comment suggestions — uses OpenAI API credit.</label>
+        <p class="search-note"><span aria-hidden="true">◷</span> Identical searches are cached for 6 hours to save Apify credit. Up to 10 posts per search.</p>
+      </form>
+    </section>
+    <!-- FEATURE/FUNCTION: Results workspace. PURPOSE: Explain state and show only genuine returned posts. -->
+    <section class="results-area" aria-labelledby="results-title"><div class="section-top"><div><p class="eyebrow">YOUR NEXT CONVERSATION</p><h2 id="results-title">Post opportunities <span id="result-count" hidden></span></h2></div><span id="source-badge" class="badge" hidden></span></div>
+      <p id="search-status" role="status" aria-live="polite">Ready when you are. Choose a niche and find your first posts.</p>
+      <div class="comment-toolbar"><button id="generate-comments" type="button" class="secondary" disabled>Generate Comments</button><label class="check-label"><input id="show-commented" type="checkbox"> Show commented posts</label></div>
+      <p id="comment-status" role="status" aria-live="polite"></p><p id="workspace-notice" role="status"></p>
+      <div id="results" aria-busy="false"><div class="empty-state"><div class="empty-icon" aria-hidden="true">⌕</div><h3>Good conversations start with a little discovery.</h3><p>Search a topic you know well. Your LinkedIn opportunities<br class="desktop-break"> will appear here, ready for you to review.</p><div class="steps"><span>01 &nbsp; Find a post</span><span>02 &nbsp; Review the context</span><span>03 &nbsp; Join in manually</span></div></div></div>
+    </section>
+    <aside class="coming-next"><span class="badge">MANUAL PUBLISHING</span><p><strong>Review. Copy. Add your perspective.</strong><br>AI relevance screening is not fact-checking. Verify every draft before publishing manually.</p></aside>
+  </main>
+  <footer><p>CommentFlow AI assists with discovering public post opportunities. Review every suggestion and publish comments manually.</p><span>Independent tool · Not affiliated with LinkedIn</span></footer>
+</body>
+</html>

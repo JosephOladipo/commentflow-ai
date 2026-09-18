@@ -1,0 +1,28 @@
+{
+  "name": "commentflow-ai",
+  "version": "1.0.0",
+  "description": "Local LinkedIn opportunity discovery dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "password-hash": "node scripts/hash-password.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-session": "^1.19.0",
+    "memorystore": "^1.6.8",
+    "openai": "^7.15.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "private": true
+}
