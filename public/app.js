@@ -79,6 +79,7 @@ function renderPosts(posts) {
     if (stats.length) card.append(element('p', 'engagement', stats.join('  ·  ')));
     const actions = element('div', 'post-actions'), link = element('a', '', 'Open Post ↗');
     link.href = post.postUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.addEventListener('click', () => { void Auth.request('/api/posts/' + encodeURIComponent(post.platform + ':' + post.id) + '/viewed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); });
     const review = element('button', 'review-button'); review.type = 'button';
     const updateReview = () => { const done = reviewed.has(post.postUrl); card.classList.toggle('reviewed', done); review.textContent = done ? '✓ Reviewed · Undo' : 'Mark as Reviewed'; review.setAttribute('aria-pressed', String(done)); };
     review.addEventListener('click', () => { if (reviewed.has(post.postUrl)) reviewed.delete(post.postUrl); else reviewed.add(post.postUrl); saveStored('cf.reviewed', [...reviewed]); updateReview(); });
@@ -94,7 +95,7 @@ $('search-form').addEventListener('submit', async event => {
   busy = true;
   const context = CommentFlow.beginSearch();
   const includeAI = $('include-comments').checked;
-  const query = { platform: 'linkedin', keywords: $('keywords').value, timeRange: $('time-range').value, limit: Number($('quantity').value), sortBy: $('sort').value };
+  const query = { platform: $('platform-select').value, keywords: $('keywords').value, timeRange: $('time-range').value, limit: Number($('quantity').value), sortBy: $('sort').value, searchMode: $('search-mode').value, match: $('match-mode').value };
   saveStored('cf.preferences', query);
   const controls = [...$('search-form').querySelectorAll('input, select, button')];
   controls.forEach(control => control.disabled = true);
@@ -106,7 +107,7 @@ $('search-form').addEventListener('submit', async event => {
     const response = await Auth.request('/api/posts/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query), signal: AbortSignal.timeout(155000) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'Search failed.');
-    if (!await Workspace.finishSearch(data, context, includeAI, { acceptSearch: CommentFlow.acceptSearch, renderPosts, generateDisplayed: CommentFlow.generateDisplayed })) return;
+    if (!await Workspace.finishSearch(data, context, includeAI, { acceptSearch: (posts, meta, version) => CommentFlow.acceptSearch(posts, meta, version, query.platform), renderPosts, generateDisplayed: CommentFlow.generateDisplayed })) return;
     $('source-badge').textContent = data.meta.source === 'cache' ? 'CACHED · NO NEW RUN' : 'FRESH · APIFY';
     $('source-badge').hidden = false; $('result-count').textContent = data.meta.count; $('result-count').hidden = false;
     $('search-status').textContent = Workspace.describeSearch(data.meta) + '\n' +

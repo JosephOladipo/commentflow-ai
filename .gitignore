@@ -4,5 +4,7 @@ node_modules/
 !.env.example
 data/*
 !data/.gitkeep
+backups/
+recovery*/
 *.log
 coverage/

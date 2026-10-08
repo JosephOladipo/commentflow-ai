@@ -15,7 +15,7 @@
     return lines.join('\n');
   }
   function availability(state, now = Date.now()) {
-    if (state.mode !== 'linkedin') return { available: true };
+    if (!['linkedin', 'facebook', 'instagram'].includes(state.mode)) return { available: true };
     if (state.cacheUnavailable || typeof state.searchId !== 'string' || !/^[a-f0-9]{64}$/.test(state.searchId))
       return { available: false, reason: 'missing' };
     const expiry = Date.parse(state.expiresAt);

@@ -27,22 +27,24 @@ function validateSearch(body) {
     );
   }
 
-  const { platform, keywords, timeRange, limit, sortBy } = body;
+  const { platform, keywords, timeRange, limit, sortBy, searchMode = 'simple', match = 'all' } = body;
 
   const normalized = typeof keywords === 'string'
     ? keywords.normalize('NFKC').trim().replace(/\s+/g, ' ')
     : '';
 
   if (
-    platform !== 'linkedin' ||
+    !['linkedin', 'facebook', 'instagram'].includes(platform) ||
     !Object.hasOwn(ranges, timeRange) ||
-    ![5, 10].includes(limit) ||
-    !['newest', 'relevance'].includes(sortBy)
+    ![5, 10, 15, 20, 25, 30].includes(limit) ||
+    !['newest', 'relevance'].includes(sortBy) ||
+    !['simple', 'advanced'].includes(searchMode) ||
+    !['all', 'any'].includes(match)
   ) {
     throw new AppError(
       400,
       'INVALID_SEARCH',
-      'Choose LinkedIn, 24h/3d/7d, 5 or 10 results, and newest or relevance.'
+      'Choose LinkedIn, Facebook, or Instagram, a valid search mode, 24h/3d/7d, 5–30 results, and newest or relevance.'
     );
   }
 
@@ -62,6 +64,8 @@ function validateSearch(body) {
   return {
     platform,
     keywords: normalized,
+    searchMode,
+    match,
     timeRange,
     limit,
     sortBy,
@@ -74,6 +78,8 @@ function cacheKey(query) {
   return createHash('sha256')
     .update(JSON.stringify([
       query.platform,
+      query.searchMode || 'simple',
+      query.match || 'all',
       query.keywords.toLowerCase(),
       query.timeRange,
       query.limit,
@@ -168,8 +174,9 @@ function normalizePosts(items, query, now = Date.now()) {
       continue;
     }
 
-    const postUrl = linkedinUrl(item.post_url || item.url);
-    const postText = cleanText(item.text);
+    const platform = item.platform || query.platform;
+    const postUrl = platform === 'linkedin' ? linkedinUrl(item.post_url || item.url) : cleanUrl(platform, item.postUrl || item.post_url || item.url || item.link || item.permalink);
+    const postText = cleanText(item.postText || item.text || item.caption || item.message || item.description);
 
     if (
       !postUrl ||
@@ -180,9 +187,9 @@ function normalizePosts(items, query, now = Date.now()) {
       continue;
     }
 
-    const published = timestamp(item.posted_at);
+    const published = item.publishedAt ? Date.parse(item.publishedAt) : timestamp(item.posted_at || item.created_time || item.timestamp);
 
-    if (published === null) {
+    if (!Number.isFinite(published)) {
       excluded.timestamp++;
       continue;
     }
@@ -195,7 +202,7 @@ function normalizePosts(items, query, now = Date.now()) {
       continue;
     }
 
-    const id = postUrl.match(
+    const id = cleanText(item.id) || postUrl.match(
       /(?:activity-|urn:li:(?:activity|share|ugcPost):)(\d+)/
     )?.[1] || postUrl;
 
@@ -210,7 +217,7 @@ function normalizePosts(items, query, now = Date.now()) {
     const author = item.author || {};
 
     const authorName =
-      cleanText(author.name) ||
+      cleanText(item.authorName) || cleanText(author.name) ||
       cleanText([
         cleanText(author.first_name),
         cleanText(author.last_name),
@@ -218,10 +225,10 @@ function normalizePosts(items, query, now = Date.now()) {
 
     posts.push({
       id,
-      platform: 'linkedin',
+      platform,
       authorName,
-      authorHeadline: cleanText(author.headline),
-      authorProfileUrl: linkedinUrl(author.profile_url, true),
+      authorHeadline: cleanText(item.authorHeadline || author.headline),
+      authorProfileUrl: platform === 'linkedin' ? linkedinUrl(author.profile_url, true) : cleanUrl(platform, item.authorProfileUrl || author.profile_url || author.url),
       postText,
       postUrl,
       publishedAt: new Date(published).toISOString(),
@@ -229,11 +236,11 @@ function normalizePosts(items, query, now = Date.now()) {
         item.posted_at?.display_text ||
         item.posted_at?.relative
       ),
-      reactions: count(item.stats?.total_reactions),
-      commentsCount: count(item.stats?.comments),
-      relevanceReason:
-        'Returned by LinkedIn keyword search via Apify; relevance is not independently scored.',
-      sourceProvider: 'apify',
+      reactions: count(item.reactions ?? item.likesCount ?? item.likes ?? item.stats?.total_reactions),
+      commentsCount: count(item.commentsCount ?? item.comments ?? item.comments_count ?? item.stats?.comments),
+      relevanceScore: 0,
+      relevanceReason: 'Returned by LinkedIn keyword search via Apify; local relevance screening applied.',
+      sourceProvider: item.sourceProvider || 'apify',
     });
   }
 
@@ -243,11 +250,21 @@ function normalizePosts(items, query, now = Date.now()) {
     );
   }
 
-  // Relevance retains the provider's requested order after filtering.
+  // Relevance gets rescored by discovery after Boolean validation.
   return {
     posts: posts.slice(0, query.limit),
     excluded,
   };
+}
+
+function cleanUrl(platform, value) {
+  try {
+    const url = new URL(value); const hosts = { facebook: ['facebook.com', 'www.facebook.com', 'm.facebook.com'], instagram: ['instagram.com', 'www.instagram.com'] };
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !hosts[platform]?.includes(url.hostname)) return null;
+    if (platform === 'instagram' && !/^\/(p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)) return null;
+    if (platform === 'facebook' && !/^\/(?:[^/]+\/posts\/[^/]+|groups\/[^/]+\/(?:posts|permalink)\/\d+|reel\/\d+|[^/]+\/videos\/\d+|permalink\.php|story\.php)\/?$/.test(url.pathname)) return null;
+    return 'https://' + (platform === 'instagram' ? 'www.instagram.com' : 'www.facebook.com') + url.pathname.replace(/\/$/, '') + (platform === 'facebook' && url.search ? url.search : '');
+  } catch { return null; }
 }
 
 module.exports = {
@@ -256,6 +273,7 @@ module.exports = {
   validateSearch,
   cacheKey,
   linkedinUrl,
+  cleanUrl,
   timestamp,
   normalizePosts,
 };

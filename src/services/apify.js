@@ -4,7 +4,7 @@ const ACTOR = 'apimaestro~linkedin-posts-search-scraper-no-cookies';
 
 // FEATURE/FUNCTION: Provider interface.
 // PURPOSE: Search LinkedIn using one fixed actor with validated inputs.
-function createProvider({ token, fetchImpl = fetch }) {
+function createProvider({ token, actor = ACTOR, fetchImpl = fetch }) {
   const apiToken = typeof token === 'string' ? token.trim() : '';
 
   return {
@@ -28,7 +28,7 @@ function createProvider({ token, fetchImpl = fetch }) {
       // PURPOSE: Request the selected niche and date window.
       // Three-day searches request a week and are filtered locally.
       const input = {
-        keyword: keywords,
+        keyword: search.providerKeywords || keywords,
         sort_type: sortBy === 'newest' ? 'date_posted' : 'relevance',
         page_number: 1,
         date_filter: timeRange === '24h' ? 'past-24h' : 'past-week',
@@ -37,33 +37,27 @@ function createProvider({ token, fetchImpl = fetch }) {
 
       // FEATURE/FUNCTION: Single bounded actor run.
       // PURPOSE: Limit spending without pagination or automatic retries.
-      const url = new URL(
-        'https://api.apify.com/v2/acts/' +
-        ACTOR +
-        '/run-sync-get-dataset-items'
-      );
-
-      url.searchParams.set('timeout', '120');
-      url.searchParams.set('restartOnError', 'false');
-      url.searchParams.set('limit', String(limit));
-      url.searchParams.set('maxItems', String(limit));
-      url.searchParams.set('maxTotalChargeUsd', '0.05');
-
       try {
-        const response = await fetchImpl(url, {
+        // FEATURE/FUNCTION: Bounded depth. PURPOSE: Fetch at most two pages and 60 candidates while keeping the actor spend capped.
+        const depth = limit === 30 ? 2 : 1, collected = [];
+        for (let page = 1; page <= depth && collected.length < limit * 2; page++) {
+          const url = new URL('https://api.apify.com/v2/acts/' + actor + '/run-sync-get-dataset-items');
+          url.searchParams.set('timeout', '120'); url.searchParams.set('restartOnError', 'false');
+          url.searchParams.set('limit', String(limit)); url.searchParams.set('maxItems', String(limit)); url.searchParams.set('maxTotalChargeUsd', '0.05');
+          const response = await fetchImpl(url, {
           method: 'POST',
           redirect: 'error',
           headers: {
             Authorization: 'Bearer ' + apiToken,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(input),
+          body: JSON.stringify({ ...input, page_number: page }),
           signal: AbortSignal.timeout(140000),
         });
 
         // FEATURE/FUNCTION: Provider errors.
         // PURPOSE: Return useful messages without exposing credentials.
-        if (!response.ok) {
+          if (!response.ok) {
           let message;
 
           if ([401, 403].includes(response.status)) {
@@ -80,50 +74,53 @@ function createProvider({ token, fetchImpl = fetch }) {
               'Apify could not complete the search. Check the run in Apify Console before another search.';
           }
 
-          throw new AppError(
+            throw new AppError(
             502,
             'APIFY_REQUEST_FAILED',
             message
           );
-        }
+          }
 
         // FEATURE/FUNCTION: Dataset parsing.
         // PURPOSE: Require an array and support the existing nested format.
-        const data = await response.json();
+          const data = await response.json();
 
-        if (!Array.isArray(data)) {
+          if (!Array.isArray(data)) {
           throw new AppError(
             502,
             'APIFY_OUTPUT_CHANGED',
             'Apify returned an unexpected dataset format. Check the actor output before another search.'
           );
-        }
+          }
 
-        const items = data.flatMap(item =>
+          const items = data.flatMap(item =>
           Array.isArray(item?.data?.posts)
             ? item.data.posts
             : [item]
-        );
+          );
 
         // FEATURE/FUNCTION: Output validation.
         // PURPOSE: Recognise actual post_url fields and legacy url fields.
-        const hasRecognisablePost = items.some(item =>
+          const hasRecognisablePost = items.some(item =>
           item &&
           typeof item === 'object' &&
           typeof (item.post_url || item.url) === 'string' &&
           typeof item.text === 'string'
-        );
+          );
 
-        if (items.length > 0 && !hasRecognisablePost) {
+          if (items.length > 0 && !hasRecognisablePost) {
           throw new AppError(
             502,
             'APIFY_OUTPUT_CHANGED',
             'The actor output has no recognisable post URL and text fields. Inspect this run in Apify Console; no retry was made.'
           );
-        }
+          }
 
-        // Detailed URL, timestamp and duplicate checks happen in posts.js.
-        return items.slice(0, limit);
+          collected.push(...items);
+          if (items.length < limit) break;
+        }
+        // Detailed URL, timestamp, Boolean and duplicate checks happen after bounded collection.
+        return collected.slice(0, limit);
       } catch (error) {
         if (error instanceof AppError) {
           throw error;

@@ -16,7 +16,7 @@ window.CommentFlow = (() => {
   const settingsKey = () => JSON.stringify(settings());
   const remember = () => save('cf.workspace', state);
   const draftFor = post => drafts[identity(post)] || {};
-  const manualMode = () => el('platform-select').value !== 'linkedin' || el('manual-toggle').checked;
+  const manualMode = () => el('platform-select').value === 'x' || el('manual-toggle').checked;
   function status(message, error = false) { el('comment-status').textContent = message; el('comment-status').className = error ? 'error' : ''; }
   // FEATURE/FUNCTION: Submission lock. PURPOSE: Block duplicate paid actions and context changes while requests run.
   function syncControls() {
@@ -59,7 +59,7 @@ window.CommentFlow = (() => {
   function updateMode() {
     const names = { linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
     el('platform-label').textContent = names[el('platform-select').value] + (manualMode() ? ' · Manual input' : ' · Public posts');
-    el('manual-toggle-label').hidden = el('platform-select').value !== 'linkedin';
+    el('manual-toggle-label').hidden = !['linkedin', 'facebook', 'instagram'].includes(el('platform-select').value);
     el('search-form').hidden = manualMode(); el('manual-form').hidden = !manualMode();
     el('manual-form').querySelector('.search-note').textContent = el('platform-select').value === 'linkedin'
       ? 'Paste post text and link for manual assistance. No discovery will run.'
@@ -72,7 +72,7 @@ window.CommentFlow = (() => {
   }
   el('platform-select').addEventListener('change', changeContext);
   el('manual-toggle').addEventListener('change', changeContext);
-  for (const id of ['manual-text', 'manual-url', 'keywords', 'time-range', 'quantity', 'sort']) el(id).addEventListener('input', () => { epoch++; });
+  for (const id of ['manual-text', 'manual-url', 'keywords', 'time-range', 'quantity', 'sort', 'search-mode', 'match-mode']) el(id).addEventListener('input', () => { epoch++; });
   el('show-commented').checked = load('cf.showCommented', false) === true;
   el('show-commented').addEventListener('change', () => { save('cf.showCommented', el('show-commented').checked); refresh(); });
   // FEATURE/FUNCTION: Comment transport. PURPOSE: Send one bounded request and never retry automatically.
@@ -92,16 +92,25 @@ window.CommentFlow = (() => {
     }
     save('cf.drafts', drafts);
   }
+  // FEATURE/FUNCTION: Saved comment reuse. PURPOSE: Show durable prior suggestions without requesting the AI again.
+  function restoreSavedComments(posts) {
+    for (const post of posts) {
+      const history = Array.isArray(post.commentHistory) ? post.commentHistory : [];
+      const prior = history.at(-1);
+      if (prior?.commentText && !draftFor(post).comment) drafts[identity(post)] = { comment: prior.commentText, suitable: true, relevanceReason: 'Previously generated comment.', edited: false };
+    }
+    save('cf.drafts', drafts);
+  }
   // FEATURE/FUNCTION: Batch and alternative generation. PURPOSE: Reuse server-owned LinkedIn text without rerunning Apify.
   async function generate(posts, alternative = false) {
     if (generating) return;
     if (!available()) { syncControls(); status(unavailableMessage, true); return; }
-    posts = posts.filter(post => !commented.has(identity(post)));
-    if (!posts.length) { status('No uncommented posts to generate for. Enable Show commented posts to review previous work.'); return; }
+    posts = posts.filter(post => !commented.has(identity(post)) && !(Array.isArray(post.commentHistory) && post.commentHistory.length));
+    if (!posts.length) { status('Existing saved comments are shown where available. No new AI request was needed.'); return; }
     generating = true; const version = epoch, capturedSettings = settingsKey();
     syncControls(); status(alternative ? 'Generating one alternative…' : 'Generating comments in one batch…');
     const body = { mode: state.mode, settings: settings(), alternative };
-    if (state.mode === 'linkedin') { body.searchId = state.searchId; body.postIds = posts.map(post => post.id); }
+    if (['linkedin', 'facebook', 'instagram'].includes(state.mode)) { body.searchId = state.searchId; body.postIds = posts.map(post => post.id); }
     else body.manual = { platform: posts[0].platform, postUrl: posts[0].postUrl, postText: posts[0].postText };
     if (alternative) body.previousDraft = draftFor(posts[0]).comment || '';
     try {
@@ -155,14 +164,20 @@ window.CommentFlow = (() => {
     copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(textarea.value); feedback.textContent = 'Copied. Open the post and paste manually.'; }
       catch { textarea.focus(); textarea.select(); feedback.textContent = 'Clipboard unavailable. Text selected — press Ctrl+C (or copy manually).'; } });
     alternative.addEventListener('click', () => generate([post], Boolean(textarea.value.trim())));
-    done.addEventListener('click', () => { if (commented.has(key)) commented.delete(key); else commented.add(key); save('cf.commented', [...commented]); refresh(); });
+    done.addEventListener('click', async () => {
+      const next = !commented.has(key);
+      if (next) commented.add(key); else commented.delete(key);
+      save('cf.commented', [...commented]); refresh();
+      try { await Auth.request('/api/posts/' + encodeURIComponent(key) + '/commented', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commented: next }) }); }
+      catch { status('Comment status was saved in this browser but could not be recorded on the server.', true); }
+    });
     actions.append(copy, alternative, done, counter); area.append(label, textarea, reason, actions, feedback); card.append(area); update();
   }
   return {
     isBusy: () => generating || searching,
     beginSearch() { searching = true; epoch++; syncControls(); return epoch; },
     endSearch() { searching = false; syncControls(); },
-    acceptSearch(posts, meta, version) { if (version !== epoch) return false; state = { posts, searchId: meta.searchId, expiresAt: meta.expiresAt, platform: 'linkedin', mode: 'linkedin', cacheUnavailable: false }; remember(); watchExpiry(); return true; },
+    acceptSearch(posts, meta, version, platform = 'linkedin') { if (version !== epoch) return false; restoreSavedComments(posts); state = { posts, searchId: meta.searchId, expiresAt: meta.expiresAt, platform, mode: platform, cacheUnavailable: false }; remember(); watchExpiry(); return true; },
     visiblePosts: posts => posts.filter(post => el('show-commented').checked || !commented.has(identity(post))),
     generateDisplayed: () => generate(state.posts), decorateCard,
     // FEATURE/FUNCTION: Session restoration. PURPOSE: Restore cards and edits without any paid request.

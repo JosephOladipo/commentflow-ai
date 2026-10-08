@@ -29,11 +29,11 @@ async function createCommentService({ apiKey = '', model = 'gpt-4.1-mini', cache
       if (body.alternative !== undefined && typeof body.alternative !== 'boolean') throw new AppError(400, 'INVALID_ALTERNATIVE', 'Alternative must be true or false.');
       const alternative = body.alternative === true;
       let posts;
-      if (body.mode === 'linkedin') {
-        if (body.postText !== undefined || body.posts !== undefined || body.manual !== undefined) throw new AppError(400, 'TRUSTED_CONTENT_REQUIRED', 'LinkedIn discovery comments use cached server content only.');
+      if (['linkedin', 'facebook', 'instagram'].includes(body.mode)) {
+        if (body.postText !== undefined || body.posts !== undefined || body.manual !== undefined) throw new AppError(400, 'TRUSTED_CONTENT_REQUIRED', 'Discovered-post comments use cached server content only.');
         posts = discovery.getCachedPosts(body.searchId, body.postIds);
       } else if (body.mode === 'manual') posts = [validateManual(body.manual)];
-      else throw new AppError(400, 'INVALID_COMMENT_MODE', 'Select cached LinkedIn posts or manual input.');
+      else throw new AppError(400, 'INVALID_COMMENT_MODE', 'Select cached posts or manual input.');
       if (!posts.length || posts.length > 10 || posts.some(post => typeof post.postText !== 'string' || post.postText.length > 15000))
         throw new AppError(400, 'INVALID_COMMENT_BATCH', 'Select 1–10 posts, each with at most 15,000 characters.');
       if (alternative && (posts.length !== 1 || typeof body.previousDraft !== 'string' || body.previousDraft.length > 1500))

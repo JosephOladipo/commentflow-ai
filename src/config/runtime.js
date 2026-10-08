@@ -26,8 +26,8 @@ function readConfig(env = process.env) {
   }
   const dataDir = path.resolve(env.DATA_DIR || path.join(__dirname, '../../data'));
   return { production, port, host, publicOrigin, proxyHops, username, passwordHash, sessionSecret,
-    token: (env.APIFY_API_TOKEN || '').trim(), openaiKey: (env.OPENAI_API_KEY || '').trim(),
+    token: (env.APIFY_API_TOKEN || '').trim(), linkedinActor: (env.APIFY_LINKEDIN_ACTOR || 'apimaestro~linkedin-posts-search-scraper-no-cookies').trim(), facebookActor: (env.APIFY_FACEBOOK_ACTOR || 'data-slayer~facebook-post-search').trim(), instagramActor: (env.APIFY_INSTAGRAM_ACTOR || 'scraping_solutions~instagram-boolean-search-scraper-posts-reels').trim(), openaiKey: (env.OPENAI_API_KEY || '').trim(),
     openaiModel: (env.OPENAI_MODEL || 'gpt-4.1-mini').trim(), dataDir,
-    cacheFile: path.join(dataDir, 'search-cache.json'), commentCacheFile: path.join(dataDir, 'comment-cache.json') };
+    cacheFile: path.join(dataDir, 'search-cache.json'), commentCacheFile: path.join(dataDir, 'comment-cache.json'), accountStoreFile: path.join(dataDir, 'account-history.json') };
 }
 module.exports = { readConfig };

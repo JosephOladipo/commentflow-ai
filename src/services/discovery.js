@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { AppError, validateSearch, cacheKey, normalizePosts, ranges } = require('../utils/posts');
+const { parseBooleanQuery, evaluateBoolean, scoreRelevance } = require('../utils/boolean-search');
 const TTL = 6 * 60 * 60 * 1000;
 // FEATURE/FUNCTION: Durable search store. PURPOSE: Preserve searches and usage guards across restarts.
 async function createDiscovery({ provider, cacheFile, now = Date.now }) {
@@ -49,6 +50,11 @@ async function createDiscovery({ provider, cacheFile, now = Date.now }) {
     // FEATURE/FUNCTION: Search coordinator. PURPOSE: Serialize searches, use cache, and prevent duplicate spending.
     async searchPosts(body) {
       const query = validateSearch(body), key = cacheKey(query);
+      // FEATURE/FUNCTION: Search expression. PURPOSE: Convert simple ALL/ANY controls and parse advanced Boolean input safely.
+      const expression = query.searchMode === 'simple'
+        ? query.keywords.split(/[,\s]+/).filter(Boolean).join(query.match === 'all' ? ' AND ' : ' OR ')
+        : query.keywords;
+      const ast = parseBooleanQuery(expression);
       if (active) throw new AppError(409, 'SEARCH_ACTIVE', 'A search is already running. Wait for it to finish.');
       const cached = state.entries[key];
       if (cached && now() - cached.createdAt < TTL) return result(cached, query, 'cache');
@@ -58,8 +64,16 @@ async function createDiscovery({ provider, cacheFile, now = Date.now }) {
         state.attempts[key] = now() + 30000;
         state.blockedUntil = now() + 150000;
         try { await persist(); } catch { throw new AppError(503, 'CACHE_UNAVAILABLE', 'Cannot save the usage guard. No provider request was started. Check data directory permissions.'); }
-        const items = await provider.searchPosts(query);
-        const entry = { createdAt: now(), ...normalizePosts(items, query, now()) };
+        const providerQuery = { ...query, providerKeywords: expression };
+        const adapter = typeof provider.searchPosts === 'function' ? provider : provider[query.platform];
+        if (!adapter) throw new AppError(503, 'PLATFORM_UNAVAILABLE', `${query.platform} discovery is temporarily unavailable. LinkedIn and saved results are still available.`);
+        const items = await adapter.searchPosts(providerQuery);
+        const normalized = normalizePosts(items, { ...query, limit: Math.max(query.limit, items.length) }, now());
+        const booleanExcluded = normalized.posts.filter(post => !evaluateBoolean(ast, post.postText)).length;
+        const posts = normalized.posts.filter(post => evaluateBoolean(ast, post.postText)).map(post => ({ ...post, relevanceScore: scoreRelevance(ast, post.postText) }));
+        if (query.sortBy === 'relevance') posts.sort((a, b) => b.relevanceScore - a.relevanceScore || (b.reactions || 0) - (a.reactions || 0) || Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+        else posts.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+        const entry = { createdAt: now(), posts: posts.slice(0, query.limit), excluded: { ...normalized.excluded, boolean: booleanExcluded } };
         state.entries[key] = entry;
         state.blockedUntil = 0;
         let warning;

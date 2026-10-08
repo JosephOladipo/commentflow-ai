@@ -68,7 +68,7 @@ function installAuth(app, config) {
     if (!safeEqual(username, config.username) || !validPassword) throw new AppError(401, 'INVALID_LOGIN', 'Incorrect username or password.');
     req.session.regenerate(error => {
       if (error) return next(error);
-      req.session.owner = true; req.session.authenticatedAt = Date.now(); req.session.csrf = randomBytes(32).toString('hex');
+      req.session.owner = true; req.session.account = config.username; req.session.authenticatedAt = Date.now(); req.session.csrf = randomBytes(32).toString('hex');
       req.session.save(error => error ? next(error) : res.json({ authenticated: true, csrfToken: req.session.csrf }));
     });
   });

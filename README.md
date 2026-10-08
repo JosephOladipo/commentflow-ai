@@ -1,6 +1,6 @@
 # CommentFlow AI
 
-Standalone local Node/Express and plain JavaScript dashboard. LinkedIn discovery uses Apify; Facebook, Instagram and X use pasted text and direct links only. All publishing is manual.
+Private single-owner Node/Express dashboard. LinkedIn, Facebook, and Instagram discovery use public Apify actors; X remains pasted-text only. All publishing is manual. The Dashboard, Discover, Saved Posts, History, and Settings pages use server-side account history; navigating them never starts Apify or OpenAI.
 
 ## Run
 
@@ -10,7 +10,9 @@ Use Node 22 or later. Existing dependencies: Express, dotenv and the OpenAI SDK.
 - `npm run dev`: start with Node file watching.
 - `npm test`: run offline tests with mocked clients.
 
-Keep the existing `.env` and its `PORT=3002` setting. Add `OPENAI_API_KEY` locally if absent; optionally add `OPENAI_MODEL=gpt-4.1-mini`. Never put keys in browser code. `.env.example` is a template only and does not overwrite configuration. New installations default to port 3001.
+Copy `.env.example` to `.env`, set `OWNER_USERNAME`, a hash from `npm run password-hash`, and a random 48-byte hexadecimal `SESSION_SECRET`. Add `APIFY_API_TOKEN` and `OPENAI_API_KEY` locally when needed. Never put keys in browser code. `.env.example` is a template only and does not overwrite configuration. New installations default to port 3001.
+
+Production requires `NODE_ENV=production`, a complete HTTPS `PUBLIC_ORIGIN`, and `TRUST_PROXY_HOPS=1` only behind one proxy that blocks direct access. Persist `DATA_DIR` on durable storage. Back up the ignored `data/` directory with encrypted host backups and test restores in an isolated copy; never commit `.env`, recovery data, backups, or dependency folders.
 
 The default [GPT-4.1 mini model](https://developers.openai.com/api/docs/models/gpt-4.1-mini) supports structured outputs. The installed SDK's `chat.completions.parse` consumes a strict JSON schema; the server independently checks IDs, fields and draft limits. Model access still depends on the operator's account.
 
@@ -27,11 +29,12 @@ Local browser storage preserves niches, settings, drafts, edits, commented statu
 
 ## Usage safeguards
 
-- Discovery remains fixed to `apimaestro/linkedin-posts-search-scraper-no-cookies`, 5 or 10 results, one active search, persistent cooldown and six-hour cache.
+- Discovery uses `apimaestro~linkedin-posts-search-scraper-no-cookies`, `data-slayer~facebook-post-search`, and `scraping_solutions~instagram-boolean-search-scraper-posts-reels`. Actor IDs can be changed with `APIFY_LINKEDIN_ACTOR`, `APIFY_FACEBOOK_ACTOR`, and `APIFY_INSTAGRAM_ACTOR`. Each request is capped at $0.05, with one active search, persistent cooldown, six-hour cache, bounded candidates, and no automatic retries.
+- Simple search supports All words or Any word; Advanced search safely supports `AND`, `OR`, `NOT`, parentheses, and quoted phrases. The server independently filters and ranks returned post text.
 - Actual fields supplied as verified in Prompt 2: `post_url`, `text`, `author.name`, `posted_at.timestamp` (milliseconds), `posted_at.display_text`, `stats.total_reactions`, `stats.comments`. Existing legacy field support is preserved.
 - Server filtering rejects missing timestamps, invalid URLs and duplicates; three-day requests use the provider's week filter and a server cutoff.
 - Comments: at most 10 posts, one SDK call per generation, zero retries, 45-second timeout, at most 4,000 output tokens. Alternatives are single-post only. No SDK tools, URL fetching, social connections or automatic posting.
-- Generated drafts are cached in `data/comment-cache.json` by post identity/content, settings and model (last 500 combinations). Discovery cache remains in `data/search-cache.json`. The data directory is not publicly served and is Git-ignored.
+- Generated drafts are cached in `data/comment-cache.json` by post identity/content, settings and model (last 500 combinations). Discovery cache remains in `data/search-cache.json`; saved searches, post status, views, comment history and account goal are in `data/account-history.json`. The data directory is not publicly served and is Git-ignored.
 - AI failures leave posts and drafts available. Retry Comments does not repeat discovery. Relevance screening is not fact-checking.
 - Only `public/` is served. Health exposes configuration booleans, never keys. Both paid endpoints reject cross-site browser requests and require bounded JSON bodies.
 - Run one local app instance. Deployment and final production hardening are reserved for Prompt 3.
